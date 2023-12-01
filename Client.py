@@ -1,23 +1,23 @@
-﻿"""
+"""
 Author: Yoni Reichert
 Program name: Mini-Command-Client
 Description: Sends commands and displays server responses.
 Date: 06-11-2023
 """
-import base64
 import socket
 import logging
 from PIL import Image
 import io
+import ClientCommands
 
 MAX_PACKET = 1024
 SERVER_ADDRESS = ('127.0.0.1', 1729)
 
-# set up logging
+# Set up logging
 logging.basicConfig(filename='client.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger('client')
 
-VALID_COMMANDS = ("exit", "dir", "delete", "copy", "execute", "take screenshot", "send photo")
+MESSAGE_SEPARATOR = "!"
 
 
 def parse_response(sock):
@@ -25,43 +25,58 @@ def parse_response(sock):
     receives message from server and parses it
     :param sock:
     :return:
-    Messages protocol:
-    since message type is fixed (0-9) a separation symbol is not required
-    [message content length]![message type][message content]
-    0. Exit
-    1. dir
-    ...
-
+    Messages structure:
+    [cont_len]![cmd_type][cmd_cont]
     """
-    len_str = ""
-    while (char := sock.recv(1).decode()) != "!":
-        len_str += char
-    msg_len = int(len_str)
-    msg_type = int(sock.recv(1).decode())
-    msg_content = sock.recv(msg_len).decode()
-    return msg_type, msg_content
+    try:
+        len_str = ""
+        while (char := sock.recv(1).decode()) != MESSAGE_SEPARATOR:
+            len_str += char
+        msg_len = int(len_str)
+        msg_type = int(sock.recv(1).decode())
+        msg_content = sock.recv(msg_len)
+        return msg_type, msg_content
+    except Exception as e:
+        logger.error("Failed to parse message")
 
 
 def handle_response(response_type, response_cont):
+    """
+    Handles the server response according to type
+    :param response_type:
+    :param response_cont:
+    :return: None
+    """
+    # check if message failed
+
+    # need to find a way how to not crash and not execute if the command failed.
+    # if response_cont.decode() == "-1":
+    #     print(f"Operation {VALID_COMMANDS[response_type]} failed")
+
     match response_type:
-        case 1:
+        case 2: # dir
             print(response_cont)
-        case 6:
-            image_bytes = base64.b64decode(response_cont)
-            image = Image.open(io.BytesIO(image_bytes))
+        case 7: # send photo
+            image = Image.open(io.BytesIO(response_cont))
             # Display the image
             image.show()
         case _:
-            if response_cont == "0":
-                print("Operation was successful")
-            elif response_cont == "-1":
-                print("Operation failed")
+            if response_cont.decode() == "0":
+                print(f"Operation {ClientCommands.VALID_COMMANDS[response_type]} was successful")
+
     # Need to create functions for each response type
-    pass
+    return
 
 
 def send_message(msg_cont, msg_type, sock):
-    message = str(len(msg_cont)) + "!" + msg_type + msg_cont
+    """
+    parse according to protocol and send message to server
+    :param msg_cont:
+    :param msg_type:
+    :param sock:
+    :return:
+    """
+    message = str(len(msg_cont)) + MESSAGE_SEPARATOR + msg_type + msg_cont
     sock.send(message.encode())
     return
 
@@ -72,7 +87,7 @@ def validate_user_input(message):
     @:param message: The message string to validate.
     @:return: True if message is valid, False otherwise.
     """
-    for command in VALID_COMMANDS:
+    for command in ClientCommands.VALID_COMMANDS:
         if message.startswith(command):
             return True
     # if message doesn't match any command, return un-valid
@@ -81,11 +96,17 @@ def validate_user_input(message):
 
 
 def parse_user_input(user_input):
-    for command in VALID_COMMANDS:
+    """
+    parse user input into command type and command content
+    :param user_input:
+    :return: command type
+    :return: command content
+    """
+    for command in ClientCommands.VALID_COMMANDS:
         if user_input.startswith(command + " "):
-            return str(VALID_COMMANDS.index(command)), user_input[len(command):].strip()
+            return str(ClientCommands.VALID_COMMANDS.index(command)), user_input[len(command):].strip()
         elif user_input == command:  # Check for commands without additional content
-            return str(VALID_COMMANDS.index(command)), ""
+            return str(ClientCommands.VALID_COMMANDS.index(command)), ""
     # don't need to check for invalid input, since we already checked that
 
 
@@ -96,14 +117,23 @@ def send_messages_loop(client_socket):
     :return:
     """
     try:
+        print("Choose one of the following commands:")
+        for cmd in ClientCommands.VALID_COMMANDS:
+            print(f"{cmd}, ", end="")
+        print("")
         while True:
-            message = input("Enter message:")
+            message = input("Enter message: ")
             if message == 'exit':
                 return
             # validate message
             if validate_user_input(message):
                 msg_type, msg_content = parse_user_input(message)
+                if msg_type == ClientCommands.VALID_COMMANDS.index("update commands"):
+                    # check client code validation
+                    pass
+
                 send_message(msg_content, msg_type, client_socket)
+                # response_cont here is bytes, not string
                 response_type, response_cont = parse_response(client_socket)
                 handle_response(response_type, response_cont)
             else:
@@ -131,8 +161,4 @@ def main():
 
 
 if __name__ == "__main__":
-    assert validate_user_input("dir")
-    assert not validate_user_input("lalala")
-    assert validate_user_input("send photo")
-    assert validate_user_input("exit")
     main()
