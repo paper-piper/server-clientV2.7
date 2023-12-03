@@ -35,3 +35,4 @@ def send_photo_cmd() -> bytes:
         image_bytes = photo.read()
     return image_bytes
 
+# hallo
