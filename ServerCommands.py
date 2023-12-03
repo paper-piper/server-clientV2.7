@@ -17,7 +17,9 @@ def delete_cmd(path):
     os.remove(path)
 
 
-def copy_cmd(copy_from, copy_to):
+def copy_cmd(pathes):
+    copy_from = pathes.split(',')[0]
+    copy_to = pathes.split(',')[1]
     shutil.copy(copy_from, copy_to)
 
 

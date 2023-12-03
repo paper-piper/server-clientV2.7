@@ -18,6 +18,15 @@ logging.basicConfig(filename='client.log', level=logging.INFO, format='%(asctime
 logger = logging.getLogger('client')
 
 MESSAGE_SEPARATOR = "!"
+COMMANDS_FILE_PATH = "ClientCommands.py"
+
+
+def is_valid_python_code(code):
+    try:
+        compile(code, '<string>', 'exec')
+        return True
+    except (SyntaxError, TypeError) as e:
+        return False
 
 
 def parse_response(sock):
@@ -110,6 +119,27 @@ def parse_user_input(user_input):
     # don't need to check for invalid input, since we already checked that
 
 
+def handle_message(message, client_socket):
+    msg_type, msg_content = parse_user_input(message)
+    if msg_type == ClientCommands.VALID_COMMANDS.index("update commands"):
+        # check client code validation
+        # client code and server code are separated by ','
+        with open(msg_content.split(',')[0], 'r') as client_code_file, open(msg_content.split(',')[1], 'r') as server_code_file:
+            client_code = client_code_file.read()
+            server_code = server_code_file.read()
+            # check if one of the codes aren't valid. if so, exit the function
+            if not (is_valid_python_code(client_code) and is_valid_python_code(server_code)):
+                return
+            with open(COMMANDS_FILE_PATH,'w') as client_commands:
+                client_commands.write(client_code)
+            msg_content = server_code
+
+    send_message(msg_content, msg_type, client_socket)
+    # response_cont here is bytes, not string
+    response_type, response_cont = parse_response(client_socket)
+    handle_response(response_type, response_cont)
+
+
 def send_messages_loop(client_socket):
     """
     send a message to the server and print response
@@ -125,17 +155,8 @@ def send_messages_loop(client_socket):
             message = input("Enter message: ")
             if message == 'exit':
                 return
-            # validate message
-            if validate_user_input(message):
-                msg_type, msg_content = parse_user_input(message)
-                if msg_type == ClientCommands.VALID_COMMANDS.index("update commands"):
-                    # check client code validation
-                    pass
-
-                send_message(msg_content, msg_type, client_socket)
-                # response_cont here is bytes, not string
-                response_type, response_cont = parse_response(client_socket)
-                handle_response(response_type, response_cont)
+            if validate_user_input(message, client_socket):
+                handle_message(message)
             else:
                 print("You entered an un-valid message, try again or type 'exit' to exit")
     except socket.error as err:
