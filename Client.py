@@ -18,6 +18,7 @@ logging.basicConfig(filename='client.log', level=logging.INFO, format='%(asctime
 logger = logging.getLogger('client')
 
 VALID_COMMANDS = ("exit", "dir", "delete", "copy", "execute", "take screenshot", "send photo")
+MESSAGE_SEPARATOR = "!"
 
 
 def parse_response(sock):
@@ -34,7 +35,7 @@ def parse_response(sock):
 
     """
     len_str = ""
-    while (char := sock.recv(1).decode()) != "!":
+    while (char := sock.recv(1).decode()) != MESSAGE_SEPARATOR:
         len_str += char
     msg_len = int(len_str)
     msg_type = int(sock.recv(1).decode())
@@ -43,25 +44,25 @@ def parse_response(sock):
 
 
 def handle_response(response_type, response_cont):
-    match response_type:
-        case 1:
-            print(response_cont)
-        case 6:
-            image_bytes = base64.b64decode(response_cont)
-            image = Image.open(io.BytesIO(image_bytes))
-            # Display the image
-            image.show()
-        case _:
-            if response_cont == "0":
-                print("Operation was successful")
-            elif response_cont == "-1":
-                print("Operation failed")
-    # Need to create functions for each response type
-    pass
+    if response_cont == '-1':
+        print(f"Operation '{VALID_COMMANDS[response_type]}' failed")
+    else:
+        match response_type:
+            case 1:
+                print(response_cont)
+            case 6:
+                image_bytes = base64.b64decode(response_cont)
+                image = Image.open(io.BytesIO(image_bytes))
+                # Display the image
+                image.show()
+            case _:
+                if response_cont == "0":
+                    print(f"Operation '{VALID_COMMANDS[response_type]}' successful")
+    return
 
 
 def send_message(msg_cont, msg_type, sock):
-    message = str(len(msg_cont)) + "!" + msg_type + msg_cont
+    message = str(len(msg_cont)) + MESSAGE_SEPARATOR + msg_type + msg_cont
     sock.send(message.encode())
     return
 
@@ -96,6 +97,10 @@ def send_messages_loop(client_socket):
     :return:
     """
     try:
+        print("Choose one of the following commands:")
+        for cmd in VALID_COMMANDS:
+            print(f"{cmd}, ", end="")
+        print("")
         while True:
             message = input("Enter message:")
             if message == 'exit':
@@ -132,7 +137,7 @@ def main():
 
 if __name__ == "__main__":
     assert validate_user_input("dir")
-    assert not validate_user_input("lalala")
+    assert not validate_user_input("invalid command")
     assert validate_user_input("send photo")
     assert validate_user_input("exit")
     main()
